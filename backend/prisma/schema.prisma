@@ -1,0 +1,178 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  username  String   @unique
+  name      String
+  password  String
+  avatar    String?
+  status    String   @default("offline") // online, away, offline
+  lastSeen  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  sentMessages         Message[]
+  channelMembers       ChannelMember[]
+  reactions            Reaction[]
+  huddleParticipants   HuddleParticipant[]
+  createdChannels      Channel[]
+  dmConversations1     DirectMessage[] @relation("User1")
+  dmConversations2     DirectMessage[] @relation("User2")
+
+  @@map("users")
+}
+
+model Channel {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  type        String   @default("public") // public, private
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  createdBy User            @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  messages  Message[]
+  members   ChannelMember[]
+  huddles   Huddle[]
+
+  @@map("channels")
+}
+
+model ChannelMember {
+  id        String   @id @default(cuid())
+  channelId String
+  userId    String
+  role      String   @default("member") // admin, member
+  joinedAt  DateTime @default(now())
+
+  // Relationships
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+  @@map("channel_members")
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  content   String
+  type      String   @default("text") // text, file, system
+  channelId String?
+  dmId      String?
+  userId    String
+  threadId  String?  // For threaded messages
+  edited    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel      Channel?       @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  dm           DirectMessage? @relation(fields: [dmId], references: [id], onDelete: Cascade)
+  thread       Message?       @relation("MessageThread", fields: [threadId], references: [id])
+  threadReplies Message[]     @relation("MessageThread")
+  reactions    Reaction[]
+  attachments  Attachment[]
+
+  @@map("messages")
+}
+
+model Reaction {
+  id        String   @id @default(cuid())
+  emoji     String   // Unicode emoji or custom emoji name
+  messageId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  // Relationships
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@map("reactions")
+}
+
+model Attachment {
+  id           String   @id @default(cuid())
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  url          String
+  messageId    String
+  uploadedAt   DateTime @default(now())
+
+  // Relationships
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
+}
+
+model DirectMessage {
+  id        String   @id @default(cuid())
+  user1Id   String
+  user2Id   String
+  createdAt DateTime @default(now())
+
+  // Relationships
+  user1    User      @relation("User1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2    User      @relation("User2", fields: [user2Id], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@unique([user1Id, user2Id])
+  @@map("direct_messages")
+}
+
+model Huddle {
+  id          String   @id @default(cuid())
+  name        String?
+  channelId   String?
+  creatorId   String
+  status      String   @default("active") // active, ended
+  startedAt   DateTime @default(now())
+  endedAt     DateTime?
+
+  // Relationships
+  channel      Channel?             @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  participants HuddleParticipant[]
+
+  @@map("huddles")
+}
+
+model HuddleParticipant {
+  id         String    @id @default(cuid())
+  huddleId   String
+  userId     String
+  joinedAt   DateTime  @default(now())
+  leftAt     DateTime?
+  audioMuted Boolean   @default(false)
+  videoOn    Boolean   @default(false)
+
+  // Relationships
+  huddle Huddle @relation(fields: [huddleId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([huddleId, userId])
+  @@map("huddle_participants")
+}
+
+model CustomEmoji {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  url       String
+  createdBy String
+  createdAt DateTime @default(now())
+
+  @@map("custom_emojis")
+}
